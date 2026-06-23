@@ -3009,6 +3009,7 @@ function buildKompendiumHTML(s, mitTrennseite=false){
     }
     return html;
   };
+  const trennseite=mitTrennseite?`
 <div style="width:21cm;min-height:29.7cm;display:flex;flex-direction:column;align-items:center;justify-content:center;page-break-after:always;background:#1a1a2e;color:#fff;text-align:center">
   <div style="font-size:11pt;opacity:.6;margin-bottom:12px;letter-spacing:2px;text-transform:uppercase">Praxislerngruppen ${sj}</div>
   <div style="font-size:32pt;font-weight:bold;margin-bottom:8px">${s.name}</div>
