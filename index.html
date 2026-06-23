@@ -2840,53 +2840,49 @@ async function generiereKompendien(){
   // Nach Schulen gruppieren
   const schulen=fs?[fs]:['Hector-Peterson-Schule','Ernst-Reuter-Schule','Refik-Veseli-Schule'];
   let gesamtAnzahl=0;
+  let gesamtGesamt=0;
+  // Gesamtzahl ermitteln für Fortschrittsbalken
+  for(const schule of schulen){
+    gesamtGesamt+=state.schueler.filter(s=>s.schule===schule).length;
+  }
+  if(!gesamtGesamt){
+    progText.textContent='Keine Schüler*innen gefunden.';
+    setTimeout(()=>prog.classList.add('hidden'),2000);
+    return;
+  }
 
+  // Jedes Kompendium einzeln als eigene HTML-Datei herunterladen
   for(const schule of schulen){
     const gruppe=state.schueler.filter(s=>s.schule===schule);
     if(!gruppe.length)continue;
-    progText.textContent=`Erstelle Sammelpaket: ${schule} (${gruppe.length} Schüler*innen)…`;
-    progBar.style.width='50%';
 
-    // Alle Kompendien dieser Schule in EINER HTML-Datei zusammenfassen
-    const teile=gruppe.map((s,i)=>buildKompendiumHTML(s,i>0));
-    const html=`<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8">
-<title>Kompendien ${schule}</title>
-<style>
-  @page{size:A4;margin:0}
-  *{box-sizing:border-box}
-  body{margin:0;padding:0;font-family:Arial,sans-serif;font-size:10pt;color:#1a1a2e}
-  .trennseite{width:21cm;min-height:29.7cm;display:flex;flex-direction:column;align-items:center;justify-content:center;page-break-after:always;background:#1a1a2e;color:#fff;text-align:center}
-  .seite{width:21cm;min-height:29.7cm;padding:1.2cm 1.8cm;display:flex;flex-direction:column;page-break-after:always}
-  .seite:last-child{page-break-after:auto}
-  h2{color:#1a1a2e;font-size:14pt;margin:0 0 8px}h3{color:#e8401c;font-size:11pt;margin:10px 0 4px}
-  ul,ol{margin:4px 0;padding-left:20px;line-height:1.7}p{margin:0 0 6px;line-height:1.5}
-  .noprint{background:#1a1a2e;color:#fff;padding:10px 20px;font-size:12px;position:fixed;top:0;left:0;right:0;z-index:999;display:flex;align-items:center;gap:12px}
-  @media print{.noprint{display:none}.seite{margin-top:0}.trennseite{margin-top:0}}
-  .inhalt{margin-top:52px}@media print{.inhalt{margin-top:0}}
-</style>
-</head><body>
-<div class="noprint">
-  <span>📦 <strong>Kompendien:</strong> ${schule} · ${gruppe.length} Schüler*innen</span>
-  <span style="font-size:11px;color:rgba(255,255,255,.6)">Beim Drucken werden die Pakete durch Trennseiten voneinander getrennt</span>
-  <a href="javascript:window.print()" style="background:#e8401c;color:#fff;padding:4px 14px;border-radius:4px;text-decoration:none;margin-left:auto">🖨 Alle drucken / Als PDF</a>
-</div>
-<div class="inhalt">${teile.join('')}</div>
-</body></html>`;
+    for(let i=0;i<gruppe.length;i++){
+      const s=gruppe[i];
+      gesamtAnzahl++;
+      const pct=Math.round((gesamtAnzahl/gesamtGesamt)*100);
+      progBar.style.width=pct+'%';
+      progText.textContent=`(${gesamtAnzahl}/${gesamtGesamt}) Erstelle: ${s.name} – ${schule}…`;
 
-    const blob=new Blob([html],{type:'text/html;charset=utf-8'});
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement('a');
-    const safe=schule.replace(/\s+/g,'-');
-    a.href=url;a.download=`Kompendien_${safe}.html`;a.click();
-    URL.revokeObjectURL(url);
-    gesamtAnzahl+=gruppe.length;
-    await new Promise(r=>setTimeout(r,400));
+      // Einzelnes Kompendium bauen und sofort herunterladen
+      const html=buildKompendiumHTML(s,false);
+      const blob=new Blob([html],{type:'text/html;charset=utf-8'});
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement('a');
+      a.href=url;
+      a.download=`Kompendium_${s.name.replace(/\s+/g,'_')}.html`;
+      a.click();
+      // Blob sofort freigeben – kein Speicheraufbau
+      setTimeout(()=>URL.revokeObjectURL(url),1000);
+
+      // Kurze Pause: Browser kann Download verarbeiten, Speicher freigeben
+      await new Promise(r=>setTimeout(r,600));
+    }
   }
 
   progBar.style.width='100%';
-  progText.textContent=`✅ ${gesamtAnzahl} Kompendien in ${schulen.filter(s=>state.schueler.some(x=>x.schule===s)).length} Datei(en) erstellt!`;
-  setTimeout(()=>prog.classList.add('hidden'),3000);
-  showToast(`✅ Kompendien-Pakete erstellt`);
+  progText.textContent=`✅ ${gesamtAnzahl} individuelle Kompendien heruntergeladen!`;
+  setTimeout(()=>prog.classList.add('hidden'),4000);
+  showToast(`✅ ${gesamtAnzahl} Kompendien erstellt`);
 }
 
 function buildKompendiumHTML(s, mitTrennseite=false){
