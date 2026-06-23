@@ -2960,34 +2960,44 @@ function buildKompendiumHTML(s, mitTrennseite=false){
 </div>`;
 
   // Einwilligung: Original-PDF + personalisierte Überlagerung als separate HTML-Seite davor
+  // Einwilligung: erst Original-PDF (unverändert), dann Unterschriftsseite
   const einwilligungVorseite=`
 <div class="seite" style="background:#fff">
-  <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
-    <img src="${logoPos}" style="height:36px">
+  <div style="display:flex;justify-content:flex-end;margin-bottom:16px">
+    <img src="${logoPos}" style="height:40px">
   </div>
-  <div style="border:1px solid #d0d0dc;padding:12px 16px;margin-bottom:12px;background:#f2efe8;border-radius:6px;font-size:9pt">
-    <div style="font-weight:bold;color:#e8401c;margin-bottom:6px">→ Einwilligung zur Verarbeitung personenbezogener Daten – bitte unterschreiben und zurückgeben!</div>
-    <table style="width:100%;border-collapse:collapse">
-      <tr><td style="padding:4px 0;font-weight:bold;width:40%">Name, Vorname:</td><td style="padding:4px 0;border-bottom:1px solid #000;font-weight:bold">${s.name}</td></tr>
-      <tr><td style="padding:4px 0;font-weight:bold">Geburtsdatum:</td><td style="padding:4px 0;border-bottom:1px solid #ccc">${geb}</td></tr>
-      <tr><td style="padding:4px 0;font-weight:bold">Maßnahmebezeichnung:</td><td style="padding:4px 0;border-bottom:1px solid #ccc">Praxislerngruppen</td></tr>
-      <tr><td style="padding:4px 0;font-weight:bold">Schuljahr:</td><td style="padding:4px 0;border-bottom:1px solid #ccc">${sj}</td></tr>
-      <tr><td style="padding:4px 0;font-weight:bold">Auftraggeber:</td><td style="padding:4px 0;border-bottom:1px solid #ccc">Senatsverwaltung für Bildung, Jugend und Familie Berlin</td></tr>
-    </table>
+  <div style="border:2px solid #e8401c;border-radius:8px;padding:16px 20px;background:#fff3cd;margin-bottom:20px">
+    <p style="font-size:11pt;font-weight:bold;color:#e8401c;margin:0 0 8px">5. Einwilligung zur Verarbeitung personenbezogener Daten</p>
+    <p style="font-size:9pt;color:#555;margin:0">Bitte das Original-Formular auf den vorherigen Seiten lesen, die zutreffenden Felder handschriftlich ankreuzen und unten unterschreiben.</p>
   </div>
-  <p style="font-size:8.5pt;color:#555;margin-bottom:8px">Das Original-Formular folgt auf den nächsten Seiten. Bitte dort ebenfalls unterschreiben.</p>
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;font-size:9pt;margin-top:auto;padding-top:12px;border-top:1px solid #eee">
+  <table style="width:100%;border-collapse:collapse;margin-bottom:16px;font-size:9.5pt">
+    <tr style="background:#f2efe8"><td style="padding:7px 10px;font-weight:bold;width:38%">Name, Vorname Teilnehmer*in:</td><td style="padding:7px 10px;font-weight:bold;font-size:11pt">${s.name}</td></tr>
+    <tr><td style="padding:7px 10px;font-weight:bold;border-top:1px solid #eee">Geburtsdatum:</td><td style="padding:7px 10px;border-top:1px solid #eee">${geb}</td></tr>
+    <tr style="background:#f2efe8"><td style="padding:7px 10px;font-weight:bold;border-top:1px solid #eee">Maßnahmebezeichnung:</td><td style="padding:7px 10px;border-top:1px solid #eee">Praxislerngruppen</td></tr>
+    <tr><td style="padding:7px 10px;font-weight:bold;border-top:1px solid #eee">Schuljahr/Zeitraum:</td><td style="padding:7px 10px;border-top:1px solid #eee">${sj}</td></tr>
+    <tr style="background:#f2efe8"><td style="padding:7px 10px;font-weight:bold;border-top:1px solid #eee">Auftraggeber/Bedarfsträger:</td><td style="padding:7px 10px;border-top:1px solid #eee">Senatsverwaltung für Bildung, Jugend und Familie Berlin</td></tr>
+  </table>
+  <p style="font-size:9pt;color:#555;margin-bottom:20px">Hiermit stimme ich der Verarbeitung meiner personenbezogenen Daten durch die BWK Bildungswerk in Kreuzberg GmbH gemäß DSGVO zu.</p>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;font-size:9pt;margin-top:auto">
     <div>
-      <div style="border-bottom:1px solid #000;height:22px;margin-bottom:3px"></div>
+      <div style="border-bottom:1px solid #000;height:24px;margin-bottom:4px"></div>
       <p style="margin:0">Datum</p>
-      <div style="border-bottom:1px solid #000;height:22px;margin:14px 0 3px"></div>
-      <p style="margin:0">Unterschrift Schüler*in: <strong>${s.name}</strong></p>
+      <div style="border-bottom:1px solid #000;height:24px;margin:16px 0 4px"></div>
+      <p style="margin:0">Unterschrift Teilnehmer*in:<br><strong>${s.name}</strong></p>
     </div>
     <div>
-      <div style="border-bottom:1px solid #000;height:22px;margin-bottom:3px"></div>
+      <div style="border-bottom:1px solid #000;height:24px;margin-bottom:4px"></div>
       <p style="margin:0">Unterschrift Erziehungsberechtigte*r</p>
       <p style="font-size:8pt;color:#888;margin:2px 0 0">(bei Minderjährigen)</p>
+      <div style="border-bottom:1px solid #000;height:24px;margin:16px 0 4px"></div>
+      <p style="margin:0">Name, Vorname BWK-Mitarbeiter*in</p>
+      <div style="border-bottom:1px solid #000;height:24px;margin:16px 0 4px"></div>
+      <p style="margin:0">Unterschrift BWK-Mitarbeiter*in</p>
     </div>
+  </div>
+  <div style="margin-top:auto;padding-top:8px;border-top:1px solid #eee;font-size:8pt;color:#aaa;display:flex;justify-content:space-between">
+    <span>008/416 · Rev.nr. 2 · Stand: Mrz. 2021</span>
+    <span>BWK BildungsWerk in Kreuzberg GmbH · Cuvrystraße 34, 10997 Berlin</span>
   </div>
 </div>`;
 
@@ -3030,8 +3040,8 @@ function buildKompendiumHTML(s, mitTrennseite=false){
   ${pdfEinbettung(PDF_BRANDSCHUTZ,'2. Brandschutzordnung')}
   ${pdfEinbettung(PDF_ALARMORDNUNG,'3. Alarmordnung')}
   ${pdfEinbettung(PDF_ARBEITSSICHERHEIT,'4. Arbeitssicherheit und Gesundheitsschutz')}
+  ${pdfEinbettung(PDF_EINWILLIGUNG,'5. Einwilligung zur Verarbeitung personenbezogener Daten')}
   ${einwilligungVorseite}
-  ${pdfEinbettung(PDF_EINWILLIGUNG,'5. Einwilligung zur Verarbeitung personenbezogener Daten (bitte unterschreiben!)')}
 </div>
 </body></html>`;
 
@@ -3042,8 +3052,8 @@ function buildKompendiumHTML(s, mitTrennseite=false){
     pdfEinbettung(PDF_BRANDSCHUTZ,'2. Brandschutzordnung')+
     pdfEinbettung(PDF_ALARMORDNUNG,'3. Alarmordnung')+
     pdfEinbettung(PDF_ARBEITSSICHERHEIT,'4. Arbeitssicherheit und Gesundheitsschutz')+
-    einwilligungVorseite+
-    pdfEinbettung(PDF_EINWILLIGUNG,'5. Einwilligung');
+    pdfEinbettung(PDF_EINWILLIGUNG,'5. Einwilligung')+
+    einwilligungVorseite;
 
   return wrapper;
 }
