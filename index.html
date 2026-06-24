@@ -460,7 +460,7 @@ tr:hover td{background:#fafaf8}
 
       <h3 style="border:none;margin-bottom:4px">📦 Dokumentenpakete generieren</h3>
       <p style="font-size:13px;color:var(--text2);margin-bottom:1rem">
-        Erstellt pro Schüler*in ein personalisiertes Kompendium (alle Ordnungen + Einwilligungserklärung mit vorausgefülltem Namen) sowie pro Schule eine druckfertige Kenntnisnahme-Namensliste. Die Pakete werden als HTML-Datei zum Drucken/PDF-Speichern bereitgestellt.
+        Erstellt pro Schüler*in ein personalisiertes Kompendium (alle Ordnungen + Einwilligungserklärung mit vorausgefülltem Namen) sowie pro Schule eine druckfertige Kenntnisnahme-Namensliste. Die Kompendien werden <strong>schulweise als ZIP-Paket</strong> heruntergeladen – die Original-PDFs bleiben QM-konform eingebettet.
       </p>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:1rem">
         <select id="dok-schule-filter" style="padding:6px 10px;border:1px solid var(--border2);border-radius:var(--radius);font-size:13px">
@@ -2837,9 +2837,12 @@ async function generiereKompendien(){
   const progText=document.getElementById('dok-progress-text');
   const progBar=document.getElementById('dok-progress-bar');
   prog.classList.remove('hidden');
+  progBar.style.width='0%';
 
   // Nach Schulen gruppieren
   const schulen=fs?[fs]:['Hector-Peterson-Schule','Ernst-Reuter-Schule','Refik-Veseli-Schule'];
+
+  // Gesamtzahl für Fortschrittsbalken
   let gesamtGesamt=0;
   for(const schule of schulen){
     gesamtGesamt+=state.schueler.filter(s=>s.schule===schule).length;
@@ -2850,67 +2853,55 @@ async function generiereKompendien(){
     return;
   }
 
-  // ZIP aufbauen – alle Kompendien landen in einer einzigen ZIP-Datei
-  const zip=new JSZip();
   let gesamtAnzahl=0;
+  let zipAnzahl=0;
 
+  // Pro Schule eine ZIP erstellen
   for(const schule of schulen){
     const gruppe=state.schueler.filter(s=>s.schule===schule);
     if(!gruppe.length)continue;
 
-    // Unterordner pro Schule
-    const ordner=zip.folder(schule.replace(/\s+/g,'_'));
+    const zip=new JSZip();
+    const schulOrdner=zip.folder(schule.replace(/\s+/g,'_'));
 
     for(let i=0;i<gruppe.length;i++){
       const s=gruppe[i];
       gesamtAnzahl++;
-
-      // Fortschritt aktualisieren (Phase 1: Aufbau)
-      const pct=Math.round((gesamtAnzahl/gesamtGesamt)*80); // bis 80% für Aufbau
+      const pct=Math.round((gesamtAnzahl/gesamtGesamt)*100);
       progBar.style.width=pct+'%';
-      progText.textContent=`(${gesamtAnzahl}/${gesamtGesamt}) Erstelle: ${s.name}…`;
+      progText.textContent=`(${gesamtAnzahl}/${gesamtGesamt}) Packe: ${s.name} → ${schule}…`;
 
-      // HTML generieren und direkt in ZIP – Speicher wird nach dem Loop freigegeben
+      // HTML generieren und in ZIP einfügen (Originale bleiben erhalten)
       const html=buildKompendiumHTML(s,false);
-      ordner.file(`Kompendium_${s.name.replace(/[\s\/\\:*?"<>|]/g,'_')}.html`, html);
+      const dateiname=`Kompendium_${s.nachname||s.name}_${(s.vorname||'').replace(/\s+/g,'_')}.html`
+        .replace(/[^a-zA-Z0-9_\-\.äöüÄÖÜß]/g,'_');
+      schulOrdner.file(dateiname,html);
 
-      // Kurze Pause: UI-Thread bleibt responsiv, kein Einfrieren
-      await new Promise(r=>setTimeout(r,50));
+      // Kurze Pause um den Hauptthread nicht zu blockieren
+      await new Promise(r=>setTimeout(r,10));
     }
-  }
 
-  // ZIP komprimieren und herunterladen (Phase 2)
-  progBar.style.width='85%';
-  progText.textContent='ZIP wird erstellt…';
-
-  try{
-    const blob=await zip.generateAsync(
-      {type:'blob', compression:'DEFLATE', compressionOptions:{level:1}},
-      (meta)=>{
-        // level:1 = schnellste Komprimierung (wenig Gewinn bei Base64-PDFs, aber keine Rechenzeit)
-        const pct=85+Math.round(meta.percent*0.15);
-        progBar.style.width=pct+'%';
-        progText.textContent=`ZIP wird finalisiert… ${Math.round(meta.percent)}%`;
-      }
+    // ZIP generieren und herunterladen
+    progText.textContent=`Erstelle ZIP für ${schule}…`;
+    const zipBlob=await zip.generateAsync({type:'blob',compression:'DEFLATE',compressionOptions:{level:6}},
+      (meta)=>{progBar.style.width=Math.round((gesamtAnzahl/gesamtGesamt)*100)+'%';}
     );
-
-    const datum=new Date().toISOString().slice(0,10);
-    const schulLabel=fs?fs.replace(/\s+/g,'_'):'Alle_Schulen';
-    const url=URL.createObjectURL(blob);
+    const url=URL.createObjectURL(zipBlob);
     const a=document.createElement('a');
     a.href=url;
-    a.download=`Kompendien_${schulLabel}_${datum}.zip`;
+    a.download=`Kompendien_${schule.replace(/\s+/g,'_')}.zip`;
     a.click();
-    setTimeout(()=>URL.revokeObjectURL(url),5000);
+    setTimeout(()=>URL.revokeObjectURL(url),2000);
+    zipAnzahl++;
 
-    progBar.style.width='100%';
-    progText.textContent=`✅ ${gesamtAnzahl} Kompendien als ZIP heruntergeladen!`;
-    setTimeout(()=>prog.classList.add('hidden'),4000);
-    showToast(`✅ ${gesamtAnzahl} Kompendien als ZIP erstellt`);
-  }catch(e){
-    progText.textContent='❌ Fehler beim Erstellen der ZIP: '+e.message;
-    setTimeout(()=>prog.classList.add('hidden'),5000);
+    // Kurze Pause zwischen ZIPs
+    if(schulen.length>1) await new Promise(r=>setTimeout(r,500));
   }
+
+  progBar.style.width='100%';
+  progText.textContent=`✅ ${gesamtAnzahl} Kompendien in ${zipAnzahl} ZIP-Paket${zipAnzahl!==1?'en':''} heruntergeladen!`;
+  setTimeout(()=>prog.classList.add('hidden'),5000);
+  showToast(`✅ ${gesamtAnzahl} Kompendien in ${zipAnzahl} ZIP${zipAnzahl!==1?'s':''}`);
 }
 
 function buildKompendiumHTML(s, mitTrennseite=false){
