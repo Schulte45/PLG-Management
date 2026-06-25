@@ -459,7 +459,7 @@ tr:hover td{background:#fafaf8}
 
       <h3 style="border:none;margin-bottom:4px">📦 Dokumentenpakete generieren</h3>
       <p style="font-size:13px;color:var(--text2);margin-bottom:1rem">
-        Öffnet pro Schule ein druckfertiges Fenster mit allen Kompendien hintereinander: Deckblatt (individualisiert, mit Unterschriftsfeld), alle Original-PDFs (QM-konform), Einwilligung zur Datenverarbeitung (individualisiert, mit Unterschriftsfeld). Einfach drucken oder als PDF speichern.
+        Erstellt pro Schule <strong>eine druckfertige HTML-Datei</strong> mit allen Kompendien hintereinander (Deckblatt individualisiert + Unterschrift, Original-PDFs QM-konform, Einwilligung individualisiert + Unterschrift). Datei öffnen → drucken → fertig.
       </p>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:1rem">
         <select id="dok-schule-filter" style="padding:6px 10px;border:1px solid var(--border2);border-radius:var(--radius);font-size:13px">
@@ -469,7 +469,7 @@ tr:hover td{background:#fafaf8}
           <option>Refik-Veseli-Schule</option>
         </select>
         <button class="btn btn-primary" onclick="generiereKenntnisnahme()">📋 Kenntnisnahme-Liste drucken</button>
-        <button class="btn btn-primary" onclick="generiereKompendien()">🖨 Kompendien drucken (klassenweise)</button>
+        <button class="btn btn-primary" onclick="generiereKompendien()">🖨 Kompendien generieren (klassenweise)</button>
         <button class="btn" style="border-color:var(--bwk);color:var(--bwk)" onclick="generiereMonatsnachweise()">📋 Monatsnachweise generieren</button>
       </div>
       <div id="dok-progress" class="hidden" style="margin-bottom:1rem">
@@ -2842,14 +2842,8 @@ async function generiereKompendien(){
   const sj=state.aktuellesSchuljahr||'2026/2027';
 
   let gesamtGesamt=0;
-  for(const schule of schulen){
-    gesamtGesamt+=state.schueler.filter(s=>s.schule===schule).length;
-  }
-  if(!gesamtGesamt){
-    progText.textContent='Keine Schüler*innen gefunden.';
-    setTimeout(()=>prog.classList.add('hidden'),2000);
-    return;
-  }
+  for(const schule of schulen) gesamtGesamt+=state.schueler.filter(s=>s.schule===schule).length;
+  if(!gesamtGesamt){progText.textContent='Keine Schüler*innen gefunden.';setTimeout(()=>prog.classList.add('hidden'),2000);return;}
 
   let gesamtAnzahl=0;
 
@@ -2857,60 +2851,55 @@ async function generiereKompendien(){
     const gruppe=state.schueler.filter(s=>s.schule===schule);
     if(!gruppe.length) continue;
 
-    progText.textContent=`Erstelle Druckdokument für ${schule}…`;
-    await new Promise(r=>setTimeout(r,30));
-
-    // Alle Kompendien der Schule zusammenbauen
     let alleInhalte='';
     for(let i=0;i<gruppe.length;i++){
       const s=gruppe[i];
       gesamtAnzahl++;
       progBar.style.width=Math.round((gesamtAnzahl/gesamtGesamt)*100)+'%';
       progText.textContent=`(${gesamtAnzahl}/${gesamtGesamt}) ${s.name}…`;
-      // mitTrennseite=true → gibt nur Inhalt ohne wrapper zurück, mit Trennseite davor
       alleInhalte+=buildKompendiumHTML(s,true);
       await new Promise(r=>setTimeout(r,5));
     }
 
-    // Ein Druckfenster für die ganze Schule
     const druckHTML=`<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8">
 <title>Kompendien ${schule} · ${sj}</title>
 <style>
-  @page{size:A4;margin:0}
-  *{box-sizing:border-box}
+  @page{size:A4;margin:0}*{box-sizing:border-box}
   body{margin:0;padding:0;font-family:Arial,sans-serif;font-size:10pt;color:#1a1a2e}
   .seite{width:21cm;min-height:29.7cm;padding:1.2cm 1.8cm;display:flex;flex-direction:column;page-break-after:always}
   .pdf-seite{width:21cm;min-height:29.7cm;page-break-after:always;position:relative}
-  .pdf-label{position:absolute;top:0;left:0;right:0;background:rgba(26,26,46,0.85);color:#fff;font-size:9pt;padding:4px 12px;z-index:10}
+  .pdf-label{position:absolute;top:0;left:0;right:0;background:rgba(26,26,46,.85);color:#fff;font-size:9pt;padding:4px 12px;z-index:10}
   iframe{page-break-after:always;display:block}
-  h2{color:#1a1a2e;font-size:14pt;margin:0 0 8px}
   p{margin:0 0 6px;line-height:1.5}
   .noprint{background:#1a1a2e;color:#fff;padding:10px 20px;font-size:13px;position:fixed;top:0;left:0;right:0;z-index:999;display:flex;align-items:center;gap:16px}
   @media print{.noprint{display:none}.seite,.pdf-seite{margin-top:0}.pdf-label{display:none}}
-  .inhalt{margin-top:52px}
-  @media print{.inhalt{margin-top:0}}
-</style>
-</head><body>
+  .inhalt{margin-top:52px}@media print{.inhalt{margin-top:0}}
+</style></head><body>
 <div class="noprint">
-  <span>🖨 <strong>${schule}</strong> · ${gruppe.length} Kompendien · Jahrgang ${sj}</span>
-  <button onclick="window.print()" style="background:#e8401c;color:#fff;border:none;padding:6px 18px;border-radius:4px;font-size:13px;cursor:pointer;margin-left:auto">🖨 Alle drucken / Als PDF</button>
-  <button onclick="window.close()" style="background:rgba(255,255,255,.15);color:#fff;border:none;padding:6px 14px;border-radius:4px;font-size:13px;cursor:pointer">✕ Schließen</button>
+  <span>🖨 <strong>${schule}</strong> &nbsp;·&nbsp; ${gruppe.length} Kompendien &nbsp;·&nbsp; ${sj}</span>
+  <button onclick="window.print()" style="background:#e8401c;color:#fff;border:none;padding:6px 20px;border-radius:4px;font-size:13px;cursor:pointer;margin-left:auto">🖨 Drucken / Als PDF speichern</button>
 </div>
 <div class="inhalt">${alleInhalte}</div>
 </body></html>`;
 
+    progText.textContent=`⬇ Lade herunter: ${schule}…`;
     const blob=new Blob([druckHTML],{type:'text/html;charset=utf-8'});
     const url=URL.createObjectURL(blob);
-    window.open(url,'_blank');
-    setTimeout(()=>URL.revokeObjectURL(url),60000);
+    const a=document.createElement('a');
+    a.href=url;
+    a.download=`Kompendien_${schule.replace(/\s+/g,'_')}_${sj.replace('/','_')}.html`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(()=>URL.revokeObjectURL(url),5000);
 
-    if(schulen.length>1) await new Promise(r=>setTimeout(r,400));
+    if(schulen.length>1) await new Promise(r=>setTimeout(r,600));
   }
 
   progBar.style.width='100%';
-  progText.textContent=`✅ ${gesamtAnzahl} Kompendien in ${schulen.length} Druckfenster${schulen.length!==1?'n':''} geöffnet.`;
-  setTimeout(()=>prog.classList.add('hidden'),5000);
-  showToast(`✅ ${gesamtAnzahl} Kompendien bereit zum Drucken`);
+  progText.textContent=`✅ ${gesamtAnzahl} Kompendien als ${schulen.length} Datei${schulen.length!==1?'en':''} heruntergeladen → öffnen → drucken`;
+  setTimeout(()=>prog.classList.add('hidden'),6000);
+  showToast(`✅ ${gesamtAnzahl} Kompendien bereit`);
 }
 
 function buildKompendiumHTML(s, mitTrennseite=false){
