@@ -3161,7 +3161,6 @@ function buildKompendiumHTML(s, mitTrennseite=false){
   <a href="javascript:window.print()" style="background:#e8401c;color:#fff;padding:4px 14px;border-radius:4px;text-decoration:none;margin-left:auto">🖨 Drucken / Als PDF</a>
 </div>
 <div class="inhalt">
-  ${trennseite}
   ${deckblatt}
   ${pdfEinbettung(PDF_HAUSORDNUNG,'1a. Hausordnung')}
   ${pdfEinbettung(PDF_RAUMORDNUNG,'1b. Raumordnung')}
@@ -3173,7 +3172,7 @@ function buildKompendiumHTML(s, mitTrennseite=false){
 </body></html>`;
 
   // Im Sammelmodus nur Inhalt ohne Wrapper zurückgeben
-  if(mitTrennseite) return trennseite+deckblatt+
+  if(mitTrennseite) return deckblatt+
     pdfEinbettung(PDF_HAUSORDNUNG,'1a. Hausordnung')+
     pdfEinbettung(PDF_RAUMORDNUNG,'1b. Raumordnung')+
     pdfEinbettung(PDF_BRANDSCHUTZ,'2. Brandschutzordnung')+
