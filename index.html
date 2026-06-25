@@ -459,7 +459,7 @@ tr:hover td{background:#fafaf8}
 
       <h3 style="border:none;margin-bottom:4px">📦 Dokumentenpakete generieren</h3>
       <p style="font-size:13px;color:var(--text2);margin-bottom:1rem">
-        Erstellt pro Schule <strong>eine druckfertige HTML-Datei</strong> mit allen Kompendien hintereinander (Deckblatt individualisiert + Unterschrift, Original-PDFs QM-konform, Einwilligung individualisiert + Unterschrift). Datei öffnen → drucken → fertig.
+        Erstellt pro Schüler*in ein personalisiertes Kompendium (alle Ordnungen + Einwilligungserklärung mit vorausgefülltem Namen) sowie pro Schule eine druckfertige Kenntnisnahme-Namensliste. Die Pakete werden als HTML-Datei zum Drucken/PDF-Speichern bereitgestellt.
       </p>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:1rem">
         <select id="dok-schule-filter" style="padding:6px 10px;border:1px solid var(--border2);border-radius:var(--radius);font-size:13px">
@@ -469,7 +469,7 @@ tr:hover td{background:#fafaf8}
           <option>Refik-Veseli-Schule</option>
         </select>
         <button class="btn btn-primary" onclick="generiereKenntnisnahme()">📋 Kenntnisnahme-Liste drucken</button>
-        <button class="btn btn-primary" onclick="generiereKompendien()">🖨 Kompendien generieren (klassenweise)</button>
+        <button class="btn btn-primary" onclick="generiereKompendien()">📦 Kompendien für alle erstellen</button>
         <button class="btn" style="border-color:var(--bwk);color:var(--bwk)" onclick="generiereMonatsnachweise()">📋 Monatsnachweise generieren</button>
       </div>
       <div id="dok-progress" class="hidden" style="margin-bottom:1rem">
@@ -2846,11 +2846,12 @@ async function generiereKompendien(){
   if(!gesamtGesamt){progText.textContent='Keine Schüler*innen gefunden.';setTimeout(()=>prog.classList.add('hidden'),2000);return;}
 
   let gesamtAnzahl=0;
+  // Downloads sammeln, erst am Ende auslösen (Browser-Sicherheit bei async)
+  const downloads=[];
 
   for(const schule of schulen){
     const gruppe=state.schueler.filter(s=>s.schule===schule);
     if(!gruppe.length) continue;
-
     let alleInhalte='';
     for(let i=0;i<gruppe.length;i++){
       const s=gruppe[i];
@@ -2858,9 +2859,8 @@ async function generiereKompendien(){
       progBar.style.width=Math.round((gesamtAnzahl/gesamtGesamt)*100)+'%';
       progText.textContent=`(${gesamtAnzahl}/${gesamtGesamt}) ${s.name}…`;
       alleInhalte+=buildKompendiumHTML(s,true);
-      await new Promise(r=>setTimeout(r,5));
+      if(i%5===0) await new Promise(r=>setTimeout(r,0)); // UI atmen lassen
     }
-
     const druckHTML=`<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8">
 <title>Kompendien ${schule} · ${sj}</title>
 <style>
@@ -2881,25 +2881,24 @@ async function generiereKompendien(){
 </div>
 <div class="inhalt">${alleInhalte}</div>
 </body></html>`;
+    downloads.push({name:`Kompendien_${schule.replace(/\s+/g,'_')}.html`, html:druckHTML});
+  }
 
-    progText.textContent=`⬇ Lade herunter: ${schule}…`;
-    const blob=new Blob([druckHTML],{type:'text/html;charset=utf-8'});
+  // Alle Downloads synchron auslösen (kein async-Block, Browser erlaubt das)
+  progText.textContent='⬇ Starte Downloads…';
+  for(const dl of downloads){
+    const blob=new Blob([dl.html],{type:'text/html;charset=utf-8'});
     const url=URL.createObjectURL(blob);
     const a=document.createElement('a');
-    a.href=url;
-    a.download=`Kompendien_${schule.replace(/\s+/g,'_')}_${sj.replace('/','_')}.html`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(()=>URL.revokeObjectURL(url),5000);
-
-    if(schulen.length>1) await new Promise(r=>setTimeout(r,600));
+    a.href=url; a.download=dl.name;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(()=>URL.revokeObjectURL(url),10000);
   }
 
   progBar.style.width='100%';
-  progText.textContent=`✅ ${gesamtAnzahl} Kompendien als ${schulen.length} Datei${schulen.length!==1?'en':''} heruntergeladen → öffnen → drucken`;
+  progText.textContent=`✅ ${gesamtAnzahl} Kompendien in ${downloads.length} Datei${downloads.length!==1?'en':''} → öffnen → drucken`;
   setTimeout(()=>prog.classList.add('hidden'),6000);
-  showToast(`✅ ${gesamtAnzahl} Kompendien bereit`);
+  showToast(`✅ ${downloads.length} Datei${downloads.length!==1?'en':''} heruntergeladen`);
 }
 
 function buildKompendiumHTML(s, mitTrennseite=false){
