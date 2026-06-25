@@ -243,7 +243,51 @@ tr:hover td{background:#fafaf8}
 .missing{color:var(--text3);font-style:italic;font-size:12px}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script>
+/* ===== MINI-ZIP (kein CDN nötig, läuft lokal) ===== */
+/* Basiert auf der ZIP-Spezifikation (PKWARE), ohne Komprimierung (store only) */
+var MiniZip=(function(){
+  function crc32(buf){
+    var t=new Uint8Array(buf),c=0xFFFFFFFF;
+    for(var i=0;i<t.length;i++){c^=t[i];for(var j=0;j<8;j++)c=c&1?(c>>>1)^0xEDB88320:(c>>>1);}
+    return(c^0xFFFFFFFF)>>>0;
+  }
+  function str2buf(s){return new TextEncoder().encode(s);}
+  function u16(n){return[n&0xFF,(n>>8)&0xFF];}
+  function u32(n){return[n&0xFF,(n>>8)&0xFF,(n>>16)&0xFF,(n>>24)&0xFF];}
+  function concat(){
+    var bufs=[].slice.call(arguments).map(function(a){return a instanceof Uint8Array?a:new Uint8Array(a);});
+    var total=bufs.reduce(function(s,b){return s+b.length;},0);
+    var out=new Uint8Array(total);var off=0;
+    bufs.forEach(function(b){out.set(b,off);off+=b.length;});
+    return out;
+  }
+  function ZipWriter(){this.files=[];this.data=[];}
+  ZipWriter.prototype.addFile=function(name,content){
+    var nameBuf=str2buf(name);
+    var dataBuf=content instanceof Uint8Array?content:str2buf(content);
+    var crc=crc32(dataBuf);
+    var offset=this.data.reduce(function(s,b){return s+b.length;},0);
+    // Local file header
+    var lh=concat([0x50,0x4B,0x03,0x04],u16(20),u16(0),u16(0),u16(0),u16(0),u32(crc),u32(dataBuf.length),u32(dataBuf.length),u16(nameBuf.length),u16(0),nameBuf,dataBuf);
+    this.data.push(lh);
+    this.files.push({name:nameBuf,crc:crc,size:dataBuf.length,offset:offset});
+  };
+  ZipWriter.prototype.generate=function(){
+    var cdOffset=this.data.reduce(function(s,b){return s+b.length;},0);
+    var cdEntries=[];
+    this.files.forEach(function(f){
+      var cd=concat([0x50,0x4B,0x01,0x02],u16(20),u16(20),u16(0),u16(0),u16(0),u16(0),u32(f.crc),u32(f.size),u32(f.size),u16(f.name.length),u16(0),u16(0),u16(0),u16(0),u32(0),u32(f.offset),f.name);
+      cdEntries.push(cd);
+    });
+    var cdSize=cdEntries.reduce(function(s,b){return s+b.length;},0);
+    var eocd=concat([0x50,0x4B,0x05,0x06],u16(0),u16(0),u16(this.files.length),u16(this.files.length),u32(cdSize),u32(cdOffset),u16(0));
+    var all=[].concat(this.data,cdEntries,[eocd]);
+    return new Blob([concat.apply(null,all)],{type:'application/zip'});
+  };
+  return ZipWriter;
+})();
+</script>
 </head>
 <body>
 
@@ -2839,10 +2883,8 @@ async function generiereKompendien(){
   prog.classList.remove('hidden');
   progBar.style.width='0%';
 
-  // Nach Schulen gruppieren
   const schulen=fs?[fs]:['Hector-Peterson-Schule','Ernst-Reuter-Schule','Refik-Veseli-Schule'];
 
-  // Gesamtzahl für Fortschrittsbalken
   let gesamtGesamt=0;
   for(const schule of schulen){
     gesamtGesamt+=state.schueler.filter(s=>s.schule===schule).length;
@@ -2856,13 +2898,11 @@ async function generiereKompendien(){
   let gesamtAnzahl=0;
   let zipAnzahl=0;
 
-  // Pro Schule eine ZIP erstellen
   for(const schule of schulen){
     const gruppe=state.schueler.filter(s=>s.schule===schule);
     if(!gruppe.length)continue;
 
-    const zip=new JSZip();
-    const schulOrdner=zip.folder(schule.replace(/\s+/g,'_'));
+    const zip=new MiniZip();
 
     for(let i=0;i<gruppe.length;i++){
       const s=gruppe[i];
@@ -2871,31 +2911,27 @@ async function generiereKompendien(){
       progBar.style.width=pct+'%';
       progText.textContent=`(${gesamtAnzahl}/${gesamtGesamt}) Packe: ${s.name} → ${schule}…`;
 
-      // HTML generieren und in ZIP einfügen (Originale bleiben erhalten)
       const html=buildKompendiumHTML(s,false);
-      const dateiname=`Kompendium_${s.nachname||s.name}_${(s.vorname||'').replace(/\s+/g,'_')}.html`
-        .replace(/[^a-zA-Z0-9_\-\.äöüÄÖÜß]/g,'_');
-      schulOrdner.file(dateiname,html);
+      const dateiname=(schule.replace(/\s+/g,'_')+'/Kompendium_'+(s.nachname||s.name)+'_'+(s.vorname||'').replace(/\s+/g,'_')+'.html').replace(/[<>:"/\\|?*]/g,'_');
+      zip.addFile(dateiname, html);
 
-      // Kurze Pause um den Hauptthread nicht zu blockieren
-      await new Promise(r=>setTimeout(r,10));
+      await new Promise(r=>setTimeout(r,5));
     }
 
-    // ZIP generieren und herunterladen
     progText.textContent=`Erstelle ZIP für ${schule}…`;
-    const zipBlob=await zip.generateAsync({type:'blob',compression:'DEFLATE',compressionOptions:{level:6}},
-      (meta)=>{progBar.style.width=Math.round((gesamtAnzahl/gesamtGesamt)*100)+'%';}
-    );
+    await new Promise(r=>setTimeout(r,50));
+    const zipBlob=zip.generate();
     const url=URL.createObjectURL(zipBlob);
     const a=document.createElement('a');
     a.href=url;
     a.download=`Kompendien_${schule.replace(/\s+/g,'_')}.zip`;
+    document.body.appendChild(a);
     a.click();
-    setTimeout(()=>URL.revokeObjectURL(url),2000);
+    document.body.removeChild(a);
+    setTimeout(()=>URL.revokeObjectURL(url),3000);
     zipAnzahl++;
 
-    // Kurze Pause zwischen ZIPs
-    if(schulen.length>1) await new Promise(r=>setTimeout(r,500));
+    if(schulen.length>1) await new Promise(r=>setTimeout(r,800));
   }
 
   progBar.style.width='100%';
