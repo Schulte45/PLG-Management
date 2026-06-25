@@ -495,7 +495,7 @@ tr:hover td{background:#fafaf8}
 
     <div class="admin-section hidden" id="adm-sec-rotation">
       <h3>🔄 Rotationsplan – Probezeit</h3>
-      <p style="font-size:13px;color:var(--text2);margin-bottom:1rem">In den ersten 5 Wochen durchläuft jede*r Schüler*in alle 5 Werkstätten (eine Woche je Werkstatt), damit alle sich orientieren können. Danach wählen die Schüler*innen ihre Wunsch-Werkstatt.</p>
+      <p style="font-size:13px;color:var(--text2);margin-bottom:1rem">Standardmäßig durchläuft jede*r Schüler*in alle 5 Werkstätten (Rotation). Einzelne Schüler*innen können auch direkt in eine Werkstatt einsteigen – dann wird keine Rotation durchgeführt.</p>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem">
         <div>
           <div style="font-size:13px;font-weight:600;margin-bottom:8px">Maximale Kapazität je Werkstatt (gleichzeitig)</div>
@@ -525,7 +525,7 @@ tr:hover td{background:#fafaf8}
       <div class="sep"></div>
       <div style="font-size:13px;font-weight:600;margin-bottom:8px">Rotationsübersicht je Schüler*in</div>
       <div class="table-wrap">
-        <table><thead><tr><th>Name</th><th>Schule</th><th>Wo. 1</th><th>Wo. 2</th><th>Wo. 3</th><th>Wo. 4</th><th>Wo. 5</th></tr></thead>
+        <table style="min-width:100%"><thead><tr><th>Name</th><th>Schule</th><th>Modus</th><th>Werkstätten</th><th>Wo. 1</th><th>Wo. 2</th><th>Wo. 3</th><th>Wo. 4</th><th>Wo. 5</th></tr></thead>
         <tbody id="rotation-tbody"></tbody></table>
       </div>
     </div>
@@ -824,7 +824,7 @@ let currentRole=null,selectedRole=null,activeWk=null;
 let currentDate=new Date().toISOString().split('T')[0];
 let state={schueler:[],anwesenheit:{},themen:{},initialized:false,aktuellesSchuljahr:'2026/2027',archiv:[],
   dokumente:['Einwilligung zur Verarbeitung personenbezogener Daten','Hausordnung','Projekterklärung','Elternbrief','Stundenplan'],
-  kapazitaeten:{Textil:6,Friseur:6,Bau:8,Fahrrad:8,Küche:6},wuensche:{},rotation:{},
+  kapazitaeten:{Textil:6,Friseur:6,Bau:8,Fahrrad:8,Küche:6},wuensche:{},rotation:{},direkteinstieg:{},rotationWerkstaetten:{},
   ausbilder:{Textil:'',Friseur:'',Bau:'',Fahrrad:'',Küche:''}};
 
 // ===== STARTDATEN =====
@@ -2249,13 +2249,15 @@ function saveKapazitaeten(){
 function generiereRotationsplan(){
   saveKapazitaeten();
   const rotation={};
-  // Schüler*innen je Schule gruppieren, damit die Rotation pro Schule gleichmäßig verteilt wird
+  const direkteinstieg=state.direkteinstieg||{};
+  const rotWk=state.rotationWerkstaetten||{};
   SCHULEN.forEach(schule=>{
-    const gruppe=state.schueler.filter(s=>s.schule===schule);
+    const gruppe=state.schueler.filter(s=>s.schule===schule&&!direkteinstieg[s.id]);
     gruppe.forEach((s,idx)=>{
+      const wkListe=rotWk[s.id]&&rotWk[s.id].length>0?rotWk[s.id]:WK_LIST.slice();
       const rot=[];
-      for(let w=0;w<5;w++){
-        rot.push(WK_LIST[(idx+w)%WK_LIST.length]);
+      for(let w=0;w<wkListe.length;w++){
+        rot.push(wkListe[(idx+w)%wkListe.length]);
       }
       rotation[s.id]=rot;
     });
@@ -2264,7 +2266,9 @@ function generiereRotationsplan(){
   saveState();
   renderRotationTabelle();
   renderRotationAuslastung();
-  showToast('✅ Rotationsplan generiert – 5 Wochen Probezeit');
+  const anzahl=Object.keys(rotation).length;
+  const direkt=Object.values(direkteinstieg).filter(Boolean).length;
+  showToast(`✅ Rotationsplan generiert – ${anzahl} TN mit Rotation${direkt?', '+direkt+' Direkteinsteiger':''}`);
 }
 
 function loescheRotationsplan(){
@@ -2278,19 +2282,51 @@ function loescheRotationsplan(){
 
 function renderRotationTabelle(){
   const rotation=state.rotation||{};
+  const direkteinstieg=state.direkteinstieg||{};
+  const rotWk=state.rotationWerkstaetten||{};
   const k=wk=>WK_KEY[wk]||'T';
   document.getElementById('rotation-tbody').innerHTML=state.schueler.map(s=>{
+    const isDirekt=direkteinstieg[s.id]===true;
     const rot=rotation[s.id];
+    const direktWk=s.werkstatt||WK_LIST[0];
+    // Default: alle 5 Werkstätten wenn noch nichts gesetzt
+    const selectedWk=rotWk[s.id]||WK_LIST.slice();
+
+    const modusBtn=`<td style="white-space:nowrap">
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px">
+        <input type="checkbox" onchange="toggleDirektEinstieg('${s.id}',this.checked)" ${isDirekt?'checked':''}>
+        <span style="color:${isDirekt?'var(--acc)':'var(--s-anw)'};font-weight:600">${isDirekt?'Direkt':'Rotation'}</span>
+      </label>
+    </td>`;
+
+    if(isDirekt){
+      const wkSelect=`<select onchange="setzeDirektWerkstatt('${s.id}',this.value)" style="font-size:11px;padding:2px 4px;border:1px solid var(--border2);border-radius:4px;background:var(--wk-${k(direktWk)}-bg,var(--bg2));color:var(--wk-${k(direktWk)});font-weight:600">
+        ${WK_LIST.map(opt=>`<option value="${opt}" ${opt===direktWk?'selected':''}>${opt}</option>`).join('')}
+      </select>`;
+      return`<tr style="background:var(--cream2)"><td style="font-weight:500">${s.name}</td><td style="font-size:12px;color:var(--text2)">${SCHULE_SHORT[s.schule]}</td>${modusBtn}<td><span style="font-size:11px;color:var(--text2)">Werkstatt: </span>${wkSelect}</td><td colspan="5" style="color:var(--text3);font-size:11px;font-style:italic">Kein Rotationsplan</td></tr>`;
+    }
+
+    // Rotation mode: show Werkstatt checkboxes + generated weeks
+    const wkBoxes=`<td style="min-width:140px">
+      <div style="font-size:10px;color:var(--text2);margin-bottom:3px;font-weight:600">Werkstätten:</div>
+      <div style="display:flex;flex-wrap:wrap;gap:3px">
+        ${WK_LIST.map(wk=>`<label style="display:flex;align-items:center;gap:2px;font-size:10px;cursor:pointer;white-space:nowrap">
+          <input type="checkbox" onchange="toggleRotationWerkstatt('${s.id}','${wk}',this.checked)" ${selectedWk.includes(wk)?'checked':''} style="width:11px;height:11px">
+          <span style="color:var(--wk-${k(wk)});font-weight:600">${wk}</span>
+        </label>`).join('')}
+      </div>
+    </td>`;
+
     if(!rot){
-      return`<tr><td style="font-weight:500">${s.name}</td><td style="font-size:12px;color:var(--text2)">${SCHULE_SHORT[s.schule]}</td><td colspan="5" class="missing">Noch nicht generiert</td></tr>`;
+      return`<tr><td style="font-weight:500">${s.name}</td><td style="font-size:12px;color:var(--text2)">${SCHULE_SHORT[s.schule]}</td>${modusBtn}${wkBoxes}<td colspan="5" class="missing">Noch nicht generiert</td></tr>`;
     }
     const cells=rot.map((w,wi)=>`<td>
       <select onchange="aendereRotationWoche('${s.id}',${wi},this.value)" style="font-size:11px;padding:2px 4px;border:1px solid var(--border2);border-radius:4px;background:var(--wk-${k(w)}-bg,var(--bg2));color:var(--wk-${k(w)});font-weight:600;width:100%">
         ${WK_LIST.map(opt=>`<option value="${opt}" ${opt===w?'selected':''}>${opt}</option>`).join('')}
       </select>
     </td>`).join('');
-    return`<tr><td style="font-weight:500">${s.name}</td><td style="font-size:12px;color:var(--text2)">${SCHULE_SHORT[s.schule]}</td>${cells}</tr>`;
-  }).join('')||'<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:1rem">Keine Schüler*innen</td></tr>';
+    return`<tr><td style="font-weight:500">${s.name}</td><td style="font-size:12px;color:var(--text2)">${SCHULE_SHORT[s.schule]}</td>${modusBtn}${wkBoxes}${cells}</tr>`;
+  }).join('')||'<tr><td colspan="9" style="text-align:center;color:var(--text3);padding:1rem">Keine Schüler*innen</td></tr>';
 }
 
 function aendereRotationWoche(sid,wocheIdx,neueWerkstatt){
@@ -2301,18 +2337,60 @@ function aendereRotationWoche(sid,wocheIdx,neueWerkstatt){
   showToast('Änderung gespeichert');
 }
 
+function toggleDirektEinstieg(sid,isDirekt){
+  if(!state.direkteinstieg)state.direkteinstieg={};
+  state.direkteinstieg[sid]=isDirekt;
+  if(isDirekt){
+    // Rotation für diese Person entfernen
+    if(state.rotation)delete state.rotation[sid];
+  }
+  saveState();
+  renderRotationTabelle();
+  renderRotationAuslastung();
+  showToast(isDirekt?'Direkteinstieg gesetzt':'Rotation aktiviert');
+}
+
+function setzeDirektWerkstatt(sid,werkstatt){
+  const s=state.schueler.find(x=>x.id===sid);
+  if(!s)return;
+  s.werkstatt=werkstatt;
+  saveState();
+  renderRotationTabelle();
+  renderRotationAuslastung();
+  showToast(`✅ ${s.name} → ${werkstatt}`);
+}
+
+function toggleRotationWerkstatt(sid,werkstatt,checked){
+  if(!state.rotationWerkstaetten)state.rotationWerkstaetten={};
+  if(!state.rotationWerkstaetten[sid])state.rotationWerkstaetten[sid]=WK_LIST.slice();
+  const list=state.rotationWerkstaetten[sid];
+  if(checked){if(!list.includes(werkstatt))list.push(werkstatt);}
+  else{const idx=list.indexOf(werkstatt);if(idx>-1)list.splice(idx,1);}
+  if(list.length===0){showToast('⚠ Mindestens eine Werkstatt muss ausgewählt sein');state.rotationWerkstaetten[sid]=WK_LIST.slice();renderRotationTabelle();return;}
+  saveState();
+  showToast(`${werkstatt} ${checked?'hinzugefügt':'entfernt'}`);
+}
+
 function renderRotationAuslastung(){
   const rotation=state.rotation||{};
   const kap=state.kapazitaeten||{Textil:6,Friseur:6,Bau:8,Fahrrad:8,Küche:6};
-  if(!Object.keys(rotation).length){
+  const direkteinstieg=state.direkteinstieg||{};
+  const rotationOhneDirekt=Object.fromEntries(Object.entries(rotation).filter(([sid])=>!direkteinstieg[sid]));
+  if(!Object.keys(rotationOhneDirekt).length&&!Object.keys(direkteinstieg).length){
     document.getElementById('rotation-auslastung').innerHTML='<p class="missing">Bitte zuerst den Rotationsplan generieren.</p>';
     return;
+  }
+  // Direkteinsteiger anzeigen
+  const direktTN=state.schueler.filter(s=>direkteinstieg[s.id]);
+  let extraHtml='';
+  if(direktTN.length){
+    extraHtml=`<div style="margin-bottom:10px;padding:8px 10px;background:var(--cream2);border-radius:var(--radius);font-size:12px"><strong style="color:var(--acc)">Direkteinsteiger (${direktTN.length}):</strong> ${direktTN.map(s=>`${s.name} → <strong>${s.werkstatt||'?'}</strong>`).join(' · ')}</div>`;
   }
   let html='<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px">';
   for(let w=0;w<5;w++){
     html+=`<div style="background:var(--bg3);border-radius:var(--radius);padding:10px"><div style="font-size:12px;font-weight:600;margin-bottom:6px">Woche ${w+1}</div>`;
     WK_LIST.forEach(wk=>{
-      const count=Object.values(rotation).filter(r=>r[w]===wk).length;
+      const count=Object.values(rotationOhneDirekt).filter(r=>r[w]===wk).length;
       const max=kap[wk]||6;
       const over=count>max;
       html+=`<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0;${over?'color:var(--s-abs);font-weight:700':''}">
@@ -2322,7 +2400,7 @@ function renderRotationAuslastung(){
     html+='</div>';
   }
   html+='</div>';
-  document.getElementById('rotation-auslastung').innerHTML=html;
+  document.getElementById('rotation-auslastung').innerHTML=extraHtml+html;
 }
 
 // ===== WERKSTATTWÜNSCHE =====
