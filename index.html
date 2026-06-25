@@ -243,51 +243,6 @@ tr:hover td{background:#fafaf8}
 .missing{color:var(--text3);font-style:italic;font-size:12px}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script>
-/* ===== MINI-ZIP (kein CDN nötig, läuft lokal) ===== */
-/* Basiert auf der ZIP-Spezifikation (PKWARE), ohne Komprimierung (store only) */
-var MiniZip=(function(){
-  function crc32(buf){
-    var t=new Uint8Array(buf),c=0xFFFFFFFF;
-    for(var i=0;i<t.length;i++){c^=t[i];for(var j=0;j<8;j++)c=c&1?(c>>>1)^0xEDB88320:(c>>>1);}
-    return(c^0xFFFFFFFF)>>>0;
-  }
-  function str2buf(s){return new TextEncoder().encode(s);}
-  function u16(n){return[n&0xFF,(n>>8)&0xFF];}
-  function u32(n){return[n&0xFF,(n>>8)&0xFF,(n>>16)&0xFF,(n>>24)&0xFF];}
-  function concat(){
-    var bufs=[].slice.call(arguments).map(function(a){return a instanceof Uint8Array?a:new Uint8Array(a);});
-    var total=bufs.reduce(function(s,b){return s+b.length;},0);
-    var out=new Uint8Array(total);var off=0;
-    bufs.forEach(function(b){out.set(b,off);off+=b.length;});
-    return out;
-  }
-  function ZipWriter(){this.files=[];this.data=[];}
-  ZipWriter.prototype.addFile=function(name,content){
-    var nameBuf=str2buf(name);
-    var dataBuf=content instanceof Uint8Array?content:str2buf(content);
-    var crc=crc32(dataBuf);
-    var offset=this.data.reduce(function(s,b){return s+b.length;},0);
-    // Local file header
-    var lh=concat([0x50,0x4B,0x03,0x04],u16(20),u16(0),u16(0),u16(0),u16(0),u32(crc),u32(dataBuf.length),u32(dataBuf.length),u16(nameBuf.length),u16(0),nameBuf,dataBuf);
-    this.data.push(lh);
-    this.files.push({name:nameBuf,crc:crc,size:dataBuf.length,offset:offset});
-  };
-  ZipWriter.prototype.generate=function(){
-    var cdOffset=this.data.reduce(function(s,b){return s+b.length;},0);
-    var cdEntries=[];
-    this.files.forEach(function(f){
-      var cd=concat([0x50,0x4B,0x01,0x02],u16(20),u16(20),u16(0),u16(0),u16(0),u16(0),u32(f.crc),u32(f.size),u32(f.size),u16(f.name.length),u16(0),u16(0),u16(0),u16(0),u32(0),u32(f.offset),f.name);
-      cdEntries.push(cd);
-    });
-    var cdSize=cdEntries.reduce(function(s,b){return s+b.length;},0);
-    var eocd=concat([0x50,0x4B,0x05,0x06],u16(0),u16(0),u16(this.files.length),u16(this.files.length),u32(cdSize),u32(cdOffset),u16(0));
-    var all=[].concat(this.data,cdEntries,[eocd]);
-    return new Blob([concat.apply(null,all)],{type:'application/zip'});
-  };
-  return ZipWriter;
-})();
-</script>
 </head>
 <body>
 
@@ -504,7 +459,7 @@ var MiniZip=(function(){
 
       <h3 style="border:none;margin-bottom:4px">📦 Dokumentenpakete generieren</h3>
       <p style="font-size:13px;color:var(--text2);margin-bottom:1rem">
-        Erstellt pro Schüler*in ein personalisiertes Kompendium (alle Ordnungen + Einwilligungserklärung mit vorausgefülltem Namen) sowie pro Schule eine druckfertige Kenntnisnahme-Namensliste. Die Kompendien werden <strong>schulweise als ZIP-Paket</strong> heruntergeladen – die Original-PDFs bleiben QM-konform eingebettet.
+        Öffnet pro Schule ein druckfertiges Fenster mit allen Kompendien hintereinander: Deckblatt (individualisiert, mit Unterschriftsfeld), alle Original-PDFs (QM-konform), Einwilligung zur Datenverarbeitung (individualisiert, mit Unterschriftsfeld). Einfach drucken oder als PDF speichern.
       </p>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:1rem">
         <select id="dok-schule-filter" style="padding:6px 10px;border:1px solid var(--border2);border-radius:var(--radius);font-size:13px">
@@ -514,7 +469,7 @@ var MiniZip=(function(){
           <option>Refik-Veseli-Schule</option>
         </select>
         <button class="btn btn-primary" onclick="generiereKenntnisnahme()">📋 Kenntnisnahme-Liste drucken</button>
-        <button class="btn btn-primary" onclick="generiereKompendien()">📦 Kompendien für alle erstellen</button>
+        <button class="btn btn-primary" onclick="generiereKompendien()">🖨 Kompendien drucken (klassenweise)</button>
         <button class="btn" style="border-color:var(--bwk);color:var(--bwk)" onclick="generiereMonatsnachweise()">📋 Monatsnachweise generieren</button>
       </div>
       <div id="dok-progress" class="hidden" style="margin-bottom:1rem">
@@ -2884,6 +2839,7 @@ async function generiereKompendien(){
   progBar.style.width='0%';
 
   const schulen=fs?[fs]:['Hector-Peterson-Schule','Ernst-Reuter-Schule','Refik-Veseli-Schule'];
+  const sj=state.aktuellesSchuljahr||'2026/2027';
 
   let gesamtGesamt=0;
   for(const schule of schulen){
@@ -2896,48 +2852,65 @@ async function generiereKompendien(){
   }
 
   let gesamtAnzahl=0;
-  let zipAnzahl=0;
 
   for(const schule of schulen){
     const gruppe=state.schueler.filter(s=>s.schule===schule);
-    if(!gruppe.length)continue;
+    if(!gruppe.length) continue;
 
-    const zip=new MiniZip();
+    progText.textContent=`Erstelle Druckdokument für ${schule}…`;
+    await new Promise(r=>setTimeout(r,30));
 
+    // Alle Kompendien der Schule zusammenbauen
+    let alleInhalte='';
     for(let i=0;i<gruppe.length;i++){
       const s=gruppe[i];
       gesamtAnzahl++;
-      const pct=Math.round((gesamtAnzahl/gesamtGesamt)*100);
-      progBar.style.width=pct+'%';
-      progText.textContent=`(${gesamtAnzahl}/${gesamtGesamt}) Packe: ${s.name} → ${schule}…`;
-
-      const html=buildKompendiumHTML(s,false);
-      const dateiname=(schule.replace(/\s+/g,'_')+'/Kompendium_'+(s.nachname||s.name)+'_'+(s.vorname||'').replace(/\s+/g,'_')+'.html').replace(/[<>:"/\\|?*]/g,'_');
-      zip.addFile(dateiname, html);
-
+      progBar.style.width=Math.round((gesamtAnzahl/gesamtGesamt)*100)+'%';
+      progText.textContent=`(${gesamtAnzahl}/${gesamtGesamt}) ${s.name}…`;
+      // mitTrennseite=true → gibt nur Inhalt ohne wrapper zurück, mit Trennseite davor
+      alleInhalte+=buildKompendiumHTML(s,true);
       await new Promise(r=>setTimeout(r,5));
     }
 
-    progText.textContent=`Erstelle ZIP für ${schule}…`;
-    await new Promise(r=>setTimeout(r,50));
-    const zipBlob=zip.generate();
-    const url=URL.createObjectURL(zipBlob);
-    const a=document.createElement('a');
-    a.href=url;
-    a.download=`Kompendien_${schule.replace(/\s+/g,'_')}.zip`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(()=>URL.revokeObjectURL(url),3000);
-    zipAnzahl++;
+    // Ein Druckfenster für die ganze Schule
+    const druckHTML=`<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8">
+<title>Kompendien ${schule} · ${sj}</title>
+<style>
+  @page{size:A4;margin:0}
+  *{box-sizing:border-box}
+  body{margin:0;padding:0;font-family:Arial,sans-serif;font-size:10pt;color:#1a1a2e}
+  .seite{width:21cm;min-height:29.7cm;padding:1.2cm 1.8cm;display:flex;flex-direction:column;page-break-after:always}
+  .pdf-seite{width:21cm;min-height:29.7cm;page-break-after:always;position:relative}
+  .pdf-label{position:absolute;top:0;left:0;right:0;background:rgba(26,26,46,0.85);color:#fff;font-size:9pt;padding:4px 12px;z-index:10}
+  iframe{page-break-after:always;display:block}
+  h2{color:#1a1a2e;font-size:14pt;margin:0 0 8px}
+  p{margin:0 0 6px;line-height:1.5}
+  .noprint{background:#1a1a2e;color:#fff;padding:10px 20px;font-size:13px;position:fixed;top:0;left:0;right:0;z-index:999;display:flex;align-items:center;gap:16px}
+  @media print{.noprint{display:none}.seite,.pdf-seite{margin-top:0}.pdf-label{display:none}}
+  .inhalt{margin-top:52px}
+  @media print{.inhalt{margin-top:0}}
+</style>
+</head><body>
+<div class="noprint">
+  <span>🖨 <strong>${schule}</strong> · ${gruppe.length} Kompendien · Jahrgang ${sj}</span>
+  <button onclick="window.print()" style="background:#e8401c;color:#fff;border:none;padding:6px 18px;border-radius:4px;font-size:13px;cursor:pointer;margin-left:auto">🖨 Alle drucken / Als PDF</button>
+  <button onclick="window.close()" style="background:rgba(255,255,255,.15);color:#fff;border:none;padding:6px 14px;border-radius:4px;font-size:13px;cursor:pointer">✕ Schließen</button>
+</div>
+<div class="inhalt">${alleInhalte}</div>
+</body></html>`;
 
-    if(schulen.length>1) await new Promise(r=>setTimeout(r,800));
+    const blob=new Blob([druckHTML],{type:'text/html;charset=utf-8'});
+    const url=URL.createObjectURL(blob);
+    window.open(url,'_blank');
+    setTimeout(()=>URL.revokeObjectURL(url),60000);
+
+    if(schulen.length>1) await new Promise(r=>setTimeout(r,400));
   }
 
   progBar.style.width='100%';
-  progText.textContent=`✅ ${gesamtAnzahl} Kompendien in ${zipAnzahl} ZIP-Paket${zipAnzahl!==1?'en':''} heruntergeladen!`;
+  progText.textContent=`✅ ${gesamtAnzahl} Kompendien in ${schulen.length} Druckfenster${schulen.length!==1?'n':''} geöffnet.`;
   setTimeout(()=>prog.classList.add('hidden'),5000);
-  showToast(`✅ ${gesamtAnzahl} Kompendien in ${zipAnzahl} ZIP${zipAnzahl!==1?'s':''}`);
+  showToast(`✅ ${gesamtAnzahl} Kompendien bereit zum Drucken`);
 }
 
 function buildKompendiumHTML(s, mitTrennseite=false){
